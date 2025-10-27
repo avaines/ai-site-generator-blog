@@ -1,0 +1,4 @@
+dist
+package.json # there should be no code, code is for robots
+node_modules/
+package-lock.json

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en-GB">
+
+<head>
+    {% include "partials/head.html" %}
+    <link rel="icon" href="/assets/logos/favicon.png" />
+    <link rel="stylesheet" href="/theme/styles.css" />
+    <title>{{ title }} — {{ site_title | default("Author‑Driven Development") }}</title>
+</head>
+
+<body>
+    <header class="site-header">
+        <a class="brand" href="/"><img src="/assets/logos/logo.svg"
+                alt="{{ site_title | default('Author‑Driven Development') }}" /></a>
+        <nav class="site-nav">{{ nav | safe }}</nav>
+    </header>
+
+
+    <main id="content" class="container">
+        <article class="post">
+            <h1 class="post-title">{{ title }}</h1>
+            <div class="post-meta">
+                {% if date %}<time datetime="{{ date | date('YYYY-MM-DD') }}">{{ date | date('D MMM YYYY') }}</time>{%
+                endif %}
+                {% if tags and tags.length %} • <span class="tags">{% for t in tags %}<a
+                        href="/tags/{{ t | slug }}/">#{{ t }}</a>{% if not loop.last %} {% endif %}{% endfor %}</span>{%
+                endif %}
+            </div>
+            <div class="post-body">{{ content | safe }}</div>
+        </article>
+    </main>
+
+
+    {% include "partials/footer.html" %}
+</body>
+
+</html>

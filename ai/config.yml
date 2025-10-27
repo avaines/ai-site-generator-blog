@@ -1,0 +1,9 @@
+site_engine: eleventy
+max_tokens: 2000
+site_style_themes:
+- in keeping with post contents
+- pretty
+- modern
+- stylish
+system_message: |
+  UK English only. First person voice when writing posts. Prefer clarity over cleverness.
