@@ -41,12 +41,21 @@ variable "github_pat" {
   description = "GitHub PAT token for accessing private repositories"
 }
 
-variable "bedrock_foundation_model_arn" {
+## Image / build variables
+variable "image_name" {
   type        = string
-  description = "The ARN of the Bedrock Foundation Model to use"
+  description = "Name of the image / ECR repository to create. If empty the module unique id will be used."
+  default     = ""
 }
 
-variable "bedrock_embedding_model_arn" {
+variable "image_tag" {
   type        = string
-  description = "The ARN of the Bedrock Embedding Model to use for the knowledge base"
+  description = "Tag to apply to the built image"
+  default     = "latest"
+}
+
+variable "build_context_rel_path" {
+  type        = string
+  description = "Path to the Docker build context relative to this module (e.g. ../../../bedrock/agentcore)"
+  default     = "../../../bedrock/agentcore"
 }

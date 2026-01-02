@@ -1,9 +1,4 @@
-output "agent_id" {
-    value = aws_bedrockagent_agent.main.agent_id
-    description = "The Bedrock Agent ID"
-}
-
-output "agent_alias_id" {
-    value = aws_bedrockagent_agent_alias.main.agent_alias_id
-    description = "The Bedrock Agent Alias ID"
+output "agent_runtime_id" {
+  description = "The Bedrock AgentCore Runtime ID"
+  value       = aws_bedrockagentcore_agent_runtime.main.agent_runtime_id
 }

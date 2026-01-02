@@ -33,20 +33,22 @@ Returns immediately       Fires background task
 │   clone          │  │ │agent.   │ │  │   S3 bucket  │
 └──────────────────┘  │ │invoke_  │ │  │   (optional) │
                       │ │async()  │ │  │              │
-                      │ │(3 tasks)│ │  └──────────────┘
-                      │ └─────────┘ │
-                      │             │
-                      │ - Structure │
-                      │ - Posts     │
-                      │ - Theme     │
-                      └─────────────┘
-
+                      │ │(3 tasks)│ │  │              │
+                      │ └─────────┘ │  │ - Generate   │
+                      │             │  │   presigned  │
+                      │ - Structure │  │   URL        │
+                      │ - Posts     │  │              │
+                      │ - Theme     │  │ - Trigger    │
+                      └─────────────┘  │   GitHub     │
+                                       │   Action     │
+                                       └──────────────┘
 
 Architecture Notes:
 - Async entrypoint returns immediately with acknowledgment
 - Background processing uses asyncio tasks (not threads)
 - Agent interactions use invoke_async() for proper async execution
 - Zip file created and optionally uploaded to S3 for CI/CD pipeline
+- After upload, generates presigned URL and triggers GHA for deployment
 """
 
 import os
@@ -54,12 +56,14 @@ import shutil
 import boto3
 import asyncio
 import zipfile
+import requests
+
 from pathlib import Path
 from git import Repo
 from bedrock_agentcore import BedrockAgentCoreApp
 from strands import Agent
 from strands.models import BedrockModel
-from strands_tools import file_read, file_write, editor
+from strands_tools import file_read, file_write, editor, shell
 
 
 app = BedrockAgentCoreApp()
@@ -68,15 +72,17 @@ os.environ["BYPASS_TOOL_CONSENT"] = "true"
 
 repo_name = os.environ.get("GITHUB_REPO_NAME")
 github_pat = os.environ.get("GITHUB_PAT")
+github_pages_deploy_action_name = os.environ.get("GITHUB_DEPLOY_WF_NAME", "deploy.yml")
 
 
 model = BedrockModel(
-    max_tokens=12000 # Configure model with higher max_tokens to handle larger site generation tasks
+    model_id="amazon.nova-pro-v1:0", # Use Amazon model for cost savings
+    max_tokens=8096,
 )
 
 agent = Agent(
     model=model,
-    tools=[file_read, file_write, editor]
+    tools=[file_read, file_write, editor, shell]
 )
 
 
@@ -146,8 +152,12 @@ async def process_site_generation_async(site_name: str, user_prompt: str, posts_
         zip_path = create_zip(output_dir, site_name)
 
         if s3_bucket:
-            s3_key = upload_zip_to_s3(zip_path, s3_bucket, site_name)
+            s3_key, presigned_url = upload_zip_to_s3(zip_path, s3_bucket, site_name)
             print(f"Zip uploaded to: s3://{s3_bucket}/{s3_key}")
+            print(f"Presigned URL: {presigned_url}")
+
+            # Trigger GitHub Action with the presigned URL
+            trigger_github_action(presigned_url, site_name)
         else:
             print(f"Zip created at: {zip_path}")
 
@@ -210,14 +220,15 @@ Keep it minimal - just the scaffold."""
     # Task 2: Integrate posts (if provided)
     if posts_dir and posts_dir.exists() and any(posts_dir.glob("*.md")):
         print(f"Task 2: Integrating posts from {posts_dir}...")
-        posts_prompt = f"""The posts are in {posts_dir}.
+        posts_prompt = f"""Building on the existing 11ty project in {output_dir} (from the previous task), integrate posts from {posts_dir}.
 
-Configure the 11ty project in {output_dir} to:
-1. Parse all Markdown files in that directory as blog posts along with their front matter, you can exclude any marked as draft.
-2. Set up collections and any other 11ty grouping concepts, like tags, for organisation as you see fit.
-3. Build navigation, a home page, and sitemap.
+Do the following:
+1. Copy all non-draft Markdown files from {posts_dir} to {output_dir}/posts/ (create the directory if needed).
+2. Update the 11ty config to parse these copied files as blog posts, including front-matter (title, date, tags, summary).
+3. Set up collections, tags, and generate a home page, navigation, and sitemap based on the posts.
+4. Ensure posts are excluded if front-matter has 'draft: true'.
 
-Just handle the posts integration - don't regenerate the whole project."""
+Only handle posts—don't regenerate the base structure."""
 
         await agent.invoke_async(posts_prompt)
         print("Task 2: Posts integrated")
@@ -225,14 +236,16 @@ Just handle the posts integration - don't regenerate the whole project."""
     # Task 3: Apply theme (if provided)
     if theme_dir and theme_dir.exists():
         print(f"Task 3: Applying theme from {theme_dir}...")
-        theme_prompt = f"""Theme files are available in {theme_dir}.
+        theme_prompt = f"""Building on the existing 11ty project in {output_dir} (including any posts from the previous task), apply the theme from {theme_dir}.
 
-Update the 11ty project in {output_dir} to use these theme files:
-- Copy layout.html to _layouts if it exists
-- Copy CSS from theme/styles.css if it exists
-- Integrate any partials from theme/partials/
+Do the following:
+1. Copy layout.html from {theme_dir} to {output_dir}/_layouts/ (create if needed).
+2. Copy styles.css from {theme_dir} to {output_dir}/_includes/ or integrate it appropriately.
+3. Copy any partials from {theme_dir}/partials/ to {output_dir}/_includes/partials/.
+4. Update the 11ty config and layouts to use these files (e.g., reference {{layout}} in posts).
+5. If any files are missing, log a warning but proceed.
 
-Just apply the theme - don't regenerate everything."""
+Only apply the theme—don't regenerate posts or structure."""
 
         await agent.invoke_async(theme_prompt)
         print("Task 3: Theme applied")
@@ -245,21 +258,21 @@ Just apply the theme - don't regenerate everything."""
         raise ValueError("No files were created.")
 
     print("Task 4: Validation.")
-    validation_prompt = f"""Review the Eleventy project you just created in {output_dir}.
+    validation_prompt = f"""Review the complete 11ty project in {output_dir}.
 
 Please:
-1. Read the package.json file to verify all dependencies are correct
-2. Check that all referenced files and paths exist
-3. Verify the configuration files (.eleventy.js or eleventy.config.js) are syntactically valid
-4. Look for any obvious issues like missing files, broken references, or syntax errors
-5. If you find any problems, fix them immediately
+1. Verify package.json dependencies and config files (.eleventy.js) are correct.
+2. Check that posts were copied to {output_dir}/posts/ and are parseable (no drafts included).
+3. Confirm theme files (layout.html, styles.css, partials) were copied and integrated.
+4. Test for broken paths, syntax errors, or missing files—fix any you find immediately using available tools.
+5. If issues persist, report them clearly.
 
-After reviewing, confirm the project is working or report what you fixed."""
+Confirm the project is ready to build."""
 
     await agent.invoke_async(validation_prompt)
     print("Task 4: Validation completed")
 
-    print(f"Total files created: {num_files},{Agent.token_count()} tokens used during generation.")
+    print(f"Total files created: {num_files} tokens used during generation.")
     return num_files
 
 
@@ -270,16 +283,15 @@ def create_zip(output_dir: Path, site_name: str) -> Path:
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
         for file_path in output_dir.rglob("*"):
             if file_path.is_file():
-                # Add file to zip with relative path
-                arcname = file_path.relative_to(output_dir)
-                zipf.write(file_path, arcname)
+                tmp_name = file_path.relative_to(output_dir) # Add file to zip with relative path
+                zipf.write(file_path, tmp_name)
 
     print(f"Created zip: {zip_path}")
     return zip_path
 
 
-def upload_zip_to_s3(zip_path: Path, bucket: str, site_name: str) -> str:
-    """Upload zip file to S3."""
+def upload_zip_to_s3(zip_path: Path, bucket: str, site_name: str) -> tuple[str, str]:
+    """Upload zip file to S3 and return the S3 key and presigned URL."""
     s3_client = boto3.client('s3')
     s3_key = f"{site_name}/{zip_path.name}"
 
@@ -290,8 +302,42 @@ def upload_zip_to_s3(zip_path: Path, bucket: str, site_name: str) -> str:
         ExtraArgs={'ContentType': 'application/zip'}
     )
 
-    return s3_key
+    # Generate presigned URL (expires in 1 hour)
+    presigned_url = s3_client.generate_presigned_url(
+        'get_object',
+        Params={'Bucket': bucket, 'Key': s3_key},
+        ExpiresIn=3600  # 1 hour
+    )
 
+    return s3_key, presigned_url
+
+
+def trigger_github_action(presigned_url: str, site_name: str):
+    """Trigger a GitHub Action workflow dispatch with the presigned URL."""
+
+    if not repo_name or not github_pat:
+        raise ValueError("GITHUB_REPO_NAME and GITHUB_PAT environment variables must be set")
+
+    # GitHub API URL for workflow dispatch
+    url = f"https://api.github.com/repos/{repo_name}/actions/workflows/{github_pages_deploy_action_name}/dispatches"
+
+    headers = {
+        "Authorization": f"token {github_pat}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+
+    payload = {
+        "ref": "main",
+        "inputs": {
+            "presigned_url": presigned_url,
+            "site_name": site_name
+        }
+    }
+
+    response = requests.post(url, json=payload, headers=headers)
+    response.raise_for_status()
+
+    print(f"GitHub Action triggered successfully for site '{site_name}' with presigned URL.")
 
 if __name__ == "__main__":
     PORT = 8080

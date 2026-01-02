@@ -128,6 +128,21 @@ docker run --rm -p 8080:8080 \
   agentcore-local
 ```
 
+
+### Deployed
+Deployed in AWS Bedrock Agentcore looks something like 
+```bash
+aws bedrock-agentcore invoke-agent-runtime \
+--agent-runtime-arn arn:aws:bedrock-agentcore:us-east-1:$accountid$:runtime/$agent_id$
+--content-type application/json \
+--payload $(echo '{
+  "site_name": "my-blog",
+  "prompt": "A blog about technology",
+  "posts_path": "posts", "theme_path": "theme",
+  "bucket": "$mybucket$"}' | base64) \
+response.json
+```
+
 ## Output
 
 Generated site source files: `./dist/{site_name}/`

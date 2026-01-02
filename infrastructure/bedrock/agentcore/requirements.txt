@@ -1,4 +1,5 @@
 bedrock-agentcore
+GitPython
+requests
 strands-agents
 strands-agents-tools
-GitPython
