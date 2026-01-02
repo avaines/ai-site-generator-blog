@@ -1,4 +1,24 @@
-dist
-package.json # there should be no code, code is for robots
+# Build artefacts
+dist/
 node_modules/
-package-lock.json
+
+# Environment variables
+.env
+.env.*
+
+# IDE and editor files
+.vscode/
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+Thumbs.db
+
+# Logs
+logs
+*.log
+
+# Temporary folders
+tmp/
+temp/
