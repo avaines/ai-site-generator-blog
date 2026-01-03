@@ -76,7 +76,7 @@ github_pages_deploy_action_name = os.environ.get("GITHUB_DEPLOY_WF_NAME", "deplo
 
 
 model = BedrockModel(
-    model_id="amazon.nova-pro-v1:0", # Use Amazon model for cost savings
+    # model_id="amazon.nova-pro-v1:0", # Use Amazon model for cost savings
     max_tokens=8096,
 )
 

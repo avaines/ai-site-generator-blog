@@ -1,10 +1,14 @@
 FROM python:3.13-slim
 
-# Install git for repository cloning
 RUN apt-get update && \
-    apt-get install -y git && \
+    apt-get install -y git curl && \
+    curl -fsSL https://deb.nodesource.com/setup_23.x | bash - && \
+    apt-get install -y nodejs && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
+
+# Install Eleventy (11ty) globally
+RUN npm install -g @11ty/eleventy
 
 WORKDIR /app
 COPY requirements.txt .

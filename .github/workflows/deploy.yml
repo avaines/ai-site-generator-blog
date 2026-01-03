@@ -26,18 +26,14 @@ jobs:
 
     - name: Install dependencies
       run: |
-        cd my-blog
+        cd site
         npm install
-
-    - name: Build site
-      run: |
-        cd my-blog
         npm run build
 
     - name: Upload pages artifact
       uses: actions/upload-pages-artifact@v3
       with:
-        path: my-blog/_site
+        path: site/_site
 
     - name: Deploy to GitHub Pages
       id: deployment
