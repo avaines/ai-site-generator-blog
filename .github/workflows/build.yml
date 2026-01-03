@@ -1,8 +1,13 @@
-name: Build & Publish
+name: Build
 on:
   push:
     branches: [ main ]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'Prompt for the blog'
+        required: false
+        default: 'A blog about tech and disco'
 
 permissions:
   contents: read
@@ -15,4 +20,22 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    # Do some stuff, invoke the agent etc.
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: arn:aws:iam::804221019544:role/github-actions-role
+        aws-region: us-east-1
+
+    - name: Build payload
+      run: |
+        PROMPT="${{ inputs.prompt || 'A blog' }}"
+        PAYLOAD=$(echo "{\"site_name\": \"my-blog\", \"prompt\": \"$PROMPT\", \"posts_path\": \"posts\", \"theme_path\": \"theme\", \"bucket\": \"804221019544-us-east-1-dev-testagent\"}" | base64 -w 0)
+        echo "PAYLOAD=${PAYLOAD}" >> $GITHUB_ENV
+
+    - name: Invoke agent
+      run: |
+        aws bedrock-agentcore invoke-agent-runtime \
+        --agent-runtime-arn arn:aws:bedrock-agentcore:us-east-1:804221019544:runtime/dev_testagent-ozHjHJ5d6e \
+        --content-type application/json \
+        --payload $PAYLOAD \
+        response.json
