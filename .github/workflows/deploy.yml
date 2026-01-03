@@ -28,7 +28,7 @@ jobs:
       run: |
         rm -Rf node_modules # some times it packages up the node_modules folder for fun
         npm install
-        npm run build
+        eleventy # Build the site, don't trust there is a 'build' script in the package.json
 
     - name: Upload pages artifact
       uses: actions/upload-pages-artifact@v3
