@@ -283,6 +283,10 @@ def create_zip(output_dir: Path, site_name: str) -> Path:
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
         for file_path in output_dir.rglob("*"):
             if file_path.is_file():
+                 # Exclude node_modules directories
+                if "node_modules" in file_path.parts:
+                    continue
+
                 tmp_name = file_path.relative_to(output_dir) # Add file to zip with relative path
                 zipf.write(file_path, tmp_name)
 

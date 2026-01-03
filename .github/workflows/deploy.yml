@@ -26,7 +26,7 @@ jobs:
 
     - name: Install dependencies
       run: |
-        cd site
+        rm -Rf node_modules # some times it packages up the node_modules folder for fun
         npm install
         npm run build
 
